@@ -2,13 +2,14 @@
 set "name=%~1"
 set "cmd=%~2"
 set "arg=%~3"
-set "ver=1.1"
+set "ver=1.2"
 set "realpath=C:\Program files\cmddef\"
 
 if "%name%"=="" goto usage
 if "%name%"=="/?" goto usage
 if "%name%"=="/f" goto folder
 if "%name%"=="/u" goto download
+if "%name%"=="/v" goto update
 if "%name%"=="/d" goto delete
 if "%name%"=="/l" goto list
 
@@ -21,15 +22,15 @@ set "timeout=0"
 set "start_message=0"
 set "end_message=0"
 
-:: РЎРґРІРёРіР°РµРј РѕС‡РµСЂРµРґСЊ Р°СЂРіСѓРјРµРЅС‚РѕРІ РЅР° 2 (СѓР±РёСЂР°РµРј name Рё cmd)
+:: ‘двигаем очередь аргументов на 2 (убираем name и cmd)
 shift
 shift
 
 :parse_args
-:: Р•СЃР»Рё Р°СЂРіСѓРјРµРЅС‚РѕРІ Р±РѕР»СЊС€Рµ РЅРµС‚ вЂ” РІС‹С…РѕРґРёРј РёР· С†РёРєР»Р°
+:: …сли аргументов больше нет С выходим из цикла
 if "%~1"=="" goto start_work
 
-:: РџСЂРѕРІРµСЂСЏРµРј С„Р»Р°РіРё (С‚РµРїРµСЂСЊ РѕРЅРё РјРѕРіСѓС‚ Р±С‹С‚СЊ РІ Р»СЋР±РѕРј РїРѕСЂСЏРґРєРµ)
+:: ЏроверЯем флаги (теперь они могут быть в любом порЯдке)
 if "%~1"=="-e" set "no_echo=1"
 if "%~1"=="-a" set "no_args=1"
 if "%~1"=="-p" set "start_pause=1"
@@ -52,7 +53,7 @@ if "%~1"=="-f" (
 	shift
 )
 
-:: РџРµСЂРµС…РѕРґРёРј Рє СЃР»РµРґСѓСЋС‰РµРјСѓ Р°СЂРіСѓРјРµРЅС‚Сѓ
+:: Џереходим к следующему аргументу
 shift
 goto :parse_args
 :start_work
@@ -64,7 +65,7 @@ if /i "%name%" == "cmddef" (
 	goto error_h
 )
 
-:: РСЃРїРѕР»СЊР·СѓРµРј СЃРєРѕР±РєРё Рё РїРµСЂРµРЅРѕСЃ >, С‡С‚РѕР±С‹ РёР·Р±РµР¶Р°С‚СЊ РїСЂРѕР±Р»РµРј СЃРѕ СЃРїРµС†СЃРёРјРІРѕР»Р°РјРё
+:: €спользуем скобки и перенос >, чтобы избежать проблем со спецсимволами
 (
 	if "%no_echo%" == "0" (
 		echo @echo off
@@ -102,6 +103,7 @@ echo Usage:
 echo cmddef /?                 - help
 echo cmddef /f                 - open alias folder
 echo cmddef /u                 - download alias from github
+echo cmddef /v                 - update cmddef from github
 echo cmddef /l                 - list of aliases
 echo cmddef /d alias           - delete alias
 echo cmddef "alias" "command"  - create alias:
@@ -128,18 +130,17 @@ if /i "%cmd%" == "cmddef" (
 goto eof
 
 :download
-:: %cmd% С‚СѓС‚ Р±СѓРґРµС‚ РёРјРµРЅРµРј Р°Р»РёР°СЃР°, РєРѕС‚РѕСЂС‹Р№ С…РѕС‚РёРј СЃРєР°С‡Р°С‚СЊ
-:: РЎРѕР±РёСЂР°РµРј СЃСЃС‹Р»РєСѓ РїРѕ РєСѓСЃРѕС‡РєР°Рј
+:: %cmd% тут будет именем алиаса, который хотим скачать
+:: ‘обираем ссылку по кусочкам
 set "base_url=https://raw.githubusercontent.com"
 set "repo_name=my-aliases"
 set "branch=main"
 
-:: РС‚РѕРіРѕРІР°СЏ СЃРєР»РµР№РєР° (РёРјСЏ С„Р°Р№Р»Р° Р±РµСЂРµРј РёР· %cmd%)
-set "full_url=%base_url%/cersat/%repo_name%/%branch%/%cmd%.bat"
+:: €тоговаЯ склейка (имЯ файла берем из %cmd%)
+set "full_url=%base_url%/cersat/%repo_name%/%branch%/files/%cmd%.bat"
 echo Downloading %cmd% from GitHub...
-echo %full_url%
 
-:: РСЃРїРѕР»СЊР·СѓРµРј РІСЃС‚СЂРѕРµРЅРЅС‹Р№ curl
+:: €спользуем встроенный curl
 powershell -Command "Invoke-WebRequest -Uri '%full_url%' -OutFile '%realpath%%cmd%.bat'"
 rem curl -4 -f "%full_url%" -o "%realpath%%cmd%.bat"
 
@@ -147,6 +148,30 @@ if %errorlevel% equ 0 (
     echo Successfully installed: %cmd%
 ) else (
     set "error=Could not find alias "%cmd%" on GitHub."
+	goto error_h
+)
+goto eof
+
+:update
+:: %cmd% тут будет именем алиаса, который хотим скачать
+:: ‘обираем ссылку по кусочкам
+set "base_url=https://raw.githubusercontent.com"
+set "repo_name=my-aliases"
+set "branch=main"
+
+:: €тоговаЯ склейка (имЯ файла берем из %cmd%)
+set "full_url=%base_url%/cersat/%repo_name%/%branch%/core/cmddef.bat"
+echo Installing new version of Cmddef from GitHub...
+
+:: €спользуем встроенный curl
+powershell -Command "Invoke-WebRequest -Uri '%full_url%' -OutFile '%realpath%%cmd%.bat'"
+rem curl -4 -f "%full_url%" -o "%realpath%%cmd%.bat"
+
+if %errorlevel% equ 0 (
+    echo Successfully installed new version of cmddef
+) else (
+    set "error=Could not find cmddef on GitHub."
+	goto error_h
 )
 goto eof
 
