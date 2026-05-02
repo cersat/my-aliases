@@ -1,0 +1,3 @@
+cmddef.bat
+*.bat
+!core/*.bat
