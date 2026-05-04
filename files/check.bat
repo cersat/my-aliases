@@ -1,4 +1,5 @@
 @echo off
+set "name=%~1"
 :: 1. Проверяем, существует ли файл (внешняя команда)
 where "%name%" >nul 2>nul
 if %errorlevel%==0 (
