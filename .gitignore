@@ -1,4 +1,3 @@
-cmddef.bat
 *.bat
-!core/cmddef.bat
+!cmddef.bat
 !files/*.bat
