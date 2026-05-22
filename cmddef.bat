@@ -2,7 +2,7 @@
 set "name=%~1"
 set "cmd=%~2"
 set "arg=%~3"
-set "ver=1.2"
+set "ver=1.3"
 set "realpath=%~dp0"
 
 if exist "%realpath%cmddef_tmp.bat" (
