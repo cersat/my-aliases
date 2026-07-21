@@ -1,0 +1,191 @@
+#!/usr/bin/env bash
+# cmddef - alias manager (linux/bash port of Dar cmddef)
+# aliases are stored as executable .sh files in the script's own folder
+
+ver="1.3-linux"
+# resolve the real folder of THIS script (linux analog of %~dp0)
+realpath_dir="$(cd "$(dirname "$(readlink -f "$0")")" && pwd)"
+
+base_url="https://raw.githubusercontent.com"
+repo_name="cersat/my-aliases"
+branch="main"
+
+name="$1"
+cmd="$2"
+
+# ---- finish notice after self-update ----
+if [ -f "$realpath_dir/cmddef_tmp" ]; then
+    echo "Cmddef updated successfully!"
+    rm -f "$realpath_dir/cmddef_tmp"
+fi
+
+error_h() {
+    if [ -n "$1" ]; then
+        echo "[error] $1"
+    else
+        echo "[error] Unknown error!"
+    fi
+    exit 1
+}
+
+usage() {
+    echo "-----Dar-Cmddef-Version-$ver-----"
+    echo "Usage:"
+    echo "cmddef /?                 - help"
+    echo "cmddef /f                 - open alias folder"
+    echo "cmddef /u alias           - download alias from github"
+    echo "cmddef /v                 - update cmddef from github"
+    echo "cmddef /l                 - list of aliases"
+    echo "cmddef /d alias           - delete alias"
+    echo "cmddef /i                 - install PATH into .bashrc"
+    echo "cmddef 'alias' 'command'  - create alias:"
+    echo "-e - no hiding commands (keep set -x style trace off is default)"
+    echo "-a - no arguments"
+    echo "-p - add pause to start"
+    echo "-P - add pause to end"
+    echo "-n - open alias in editor"
+    echo "-m - add a message to start"
+    echo "-M - add a message to end"
+    echo "-t - timeout seconds before running"
+    echo "-f - create in other folder"
+    echo "-s - create for this session only (prints alias line to source)"
+}
+
+# ---------------- subcommands ----------------
+case "$name" in
+    "" | "/?")
+        usage; exit 0 ;;
+
+    "/f")
+        xdg-open "$realpath_dir" 2>/dev/null || echo "folder: $realpath_dir"
+        exit 0 ;;
+
+    "/l")
+        for f in "$realpath_dir"/*.sh; do
+            [ -e "$f" ] || continue
+            b="$(basename "$f" .sh)"
+            [ "$b" = "cmddef" ] && continue
+            echo "$b"
+        done
+        exit 0 ;;
+
+    "/d")
+        target="$cmd"
+        [ -z "$target" ] && error_h "No alias name to delete"
+        [ "$target" = "cmddef" ] && error_h "Cannot delete cmddef!"
+        realname="$realpath_dir/$target.sh"
+        if [ -f "$realname" ]; then
+            rm -f "$realname" || error_h "Cannot delete $realname"
+            echo "Deleted: $realname"
+        else
+            error_h "Cannot find alias $realname"
+        fi
+        exit 0 ;;
+
+    "/u")
+        [ -z "$cmd" ] && error_h "No alias name to download"
+        full_url="$base_url/$repo_name/$branch/files/$cmd.sh"
+        echo "Downloading $cmd from GitHub..."
+        if curl -4 -f -s "$full_url" -o "$realpath_dir/$cmd.sh"; then
+            chmod +x "$realpath_dir/$cmd.sh"
+            echo "Successfully installed: $cmd"
+        else
+            error_h "Could not find alias \"$cmd\" on GitHub."
+        fi
+        exit 0 ;;
+
+    "/v")
+        full_url="$base_url/$repo_name/$branch/cmddef"
+        echo "Installing new version of Cmddef from GitHub..."
+        if curl -4 -f -s "$full_url" -o "$realpath_dir/cmddef_tmp"; then
+            echo "Downloaded new version..."
+            # on linux the running script file is not locked; safe to replace directly
+            chmod +x "$realpath_dir/cmddef_tmp"
+            mv -f "$realpath_dir/cmddef_tmp" "$realpath_dir/cmddef"
+            echo "Cmddef updated successfully!"
+        else
+            error_h "Cannot find new cmddef version"
+        fi
+        exit 0 ;;
+
+    "/i")
+        # add the alias folder to PATH via .bashrc (idempotent)
+        line="export PATH=\"\$PATH:$realpath_dir\""
+        if grep -qF "$realpath_dir" "$HOME/.bashrc" 2>/dev/null; then
+            echo "PATH already contains $realpath_dir"
+        else
+            echo "$line" >> "$HOME/.bashrc"
+            echo "Added to .bashrc: $line"
+            echo "Open a new terminal or run: source ~/.bashrc"
+        fi
+        exit 0 ;;
+esac
+
+# ---------------- create alias ----------------
+if [ -z "$cmd" ]; then
+    usage; exit 0
+fi
+
+if [ "$name" = "cmddef" ]; then
+    error_h "Cannot overwrite cmddef!"
+fi
+
+# defaults
+no_echo=0; no_args=0; start_pause=0; end_pause=0
+use_editor=0; timeout=0; start_message=""; end_message=""
+one_session=0
+target_dir="$realpath_dir"
+
+# drop name + cmd, parse the rest as flags
+shift 2
+while [ -n "$1" ]; do
+    case "$1" in
+        -e) no_echo=1 ;;
+        -a) no_args=1 ;;
+        -p) start_pause=1 ;;
+        -P) end_pause=1 ;;
+        -n) use_editor=1 ;;
+        -s) one_session=1 ;;
+        -t) timeout="$2"; shift ;;
+        -m) start_message="$2"; shift ;;
+        -M) end_message="$2"; shift ;;
+        -f) target_dir="$2"; shift ;;
+    esac
+    shift
+done
+
+# session-only alias: cannot mutate parent shell from a child process.
+# print a line the user can source.
+if [ "$one_session" = "1" ]; then
+    echo "alias $name='$cmd'"
+    echo "# session alias cannot be injected from a script."
+    echo "# run this to activate now:  eval \"\$(cmddef '$name' '$cmd' -s | head -1)\""
+    exit 0
+fi
+
+realname="$target_dir/$name.sh"
+
+{
+    echo "#!/usr/bin/env bash"
+    [ "$start_pause" = "1" ] && echo "read -p 'Press enter to continue...'"
+    [ "$timeout" != "0" ]    && echo "sleep $timeout"
+    [ -n "$start_message" ]  && echo "echo '$start_message'"
+    if [ "$no_args" = "1" ]; then
+        echo "$cmd"
+    else
+        echo "$cmd \"\$@\""
+    fi
+    echo "# made by Dar cmddef version $ver"
+    [ -n "$end_message" ] && echo "echo '$end_message'"
+    [ "$end_pause" = "1" ] && echo "read -p 'Press enter to continue...'"
+} > "$realname"
+
+chmod +x "$realname"
+
+[ "$use_editor" = "1" ] && "${EDITOR:-nano}" "$realname"
+
+if [ -f "$realname" ]; then
+    echo "Created: $realname"
+else
+    error_h "Cannot create alias: $realname"
+fi
